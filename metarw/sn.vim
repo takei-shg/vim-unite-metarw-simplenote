@@ -79,18 +79,11 @@ function! metarw#sn#read(fakepath)"{{{
   return ['error', res.message]
 endfunction"}}}
 
-function! metarw#sn#write(fakepath, line1, line2, append_p)
-  let g:sn_write_fakepath = string(a:fakepath)
-  let g:sn_write_append_p = string(a:append_p)
-  let l = split(a:fakepath, ':')
-  if len(l) < 2
-    return ['error', printf('Unexpected fakepath: %s', string(a:fakepath))]
-  endif
-
-  let note_key = l[1]
+function! metarw#sn#write(fakepath, line1, line2, append_p)"{{{
+  let note_key = s:parse_note_key(a:fakepath)
   let g:sn_note_key = note_key
 
-  if metarw#service#simplenote#authorization() =~ s:FALSE
+  if metarw#service#simplenote#authorization() == s:FALSE
     return ['error', 'error in authorization']
   endif
 
@@ -104,29 +97,29 @@ function! metarw#sn#write(fakepath, line1, line2, append_p)
 "   endif
   if len(note_key) > 0
     " update with key
-    let url = printf('https://simple-note.appspot.com/api2/data/%s?auth=%s&email=%s', note_key, s:token, webapi#http#encodeURI(s:email))
+    let result = metarw#service#simplenote#update_note(
+      \ note_key,
+      \ join(getline(a:line1, a:line2), "\n")
+      \ )
+    if result == s:TRUE
+      return ['done', '']
+    else
+      return ['error', 'failed to update note. key: ' . note_key]
+    endif
   else
     " create new note
-    let url = printf('https://simple-note.appspot.com/api2/data?auth=%s&email=%s', s:token, s:email)
-  endif
-  let g:sn_update_url = url
-  let res = webapi#http#post(url,
-  \  webapi#http#encodeURI(iconv(webapi#json#encode({
-  \    'content': join(getline(a:line1, a:line2), "\n"),
-  \  }),
-  \ 'utf-8',
-  \ &encoding))
-  \)
-  if res.status =~ '^2'
-    if len(note_key) == 0
-      let key = res.content
-      silent! exec 'file '.printf('sn:%s', escape(key, ' \/#%'))
+    let result = metarw#service#simplenote#create_note(
+      \ join(getline(a:line1, a:line2), "\n")
+      \ )
+    if result.result == s:TRUE
+      silent! exec 'file '.printf('sn:%s', escape(result.key, ' \/#%'))
       set nomodified
+      return ['done', '']
+    else
+      return ['error', 'failed to create note. error: ' . result.message]
     endif
-    return ['done', '']
   endif
-  return ['error', 'status code : ' . res.status]
-endfunction
+endfunction"}}}
 
 " local functions {{{
 function! s:parse_note_key(fakepath)"{{{

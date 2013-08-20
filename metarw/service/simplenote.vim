@@ -129,6 +129,49 @@ function! metarw#service#simplenote#edit_tag(note_key, modifydate, newtags)
   return ['error', 'status code : ' . res.status]
 endfunction
 
+" note_key :: String
+" content :: String
+function! metarw#service#simplenote#update_note(note_key, content)"{{{
+  let update_url = printf(s:DATA_URL . '%s?auth=%s&email=%s', a:note_key, s:token, webapi#http#encodeURI(s:email))
+  let res = webapi#http#post(update_url,
+  \  webapi#http#encodeURI(iconv(webapi#json#encode({
+  \    'content': a:content,
+  \  }),
+  \ 'utf-8',
+  \ &encoding))
+  \)
+  if res.status =~ '^2'
+    return s:TRUE
+  else
+    echoerr printf('error in update note. note_key: %s, response header: %s. ', a:note_key, res.header[0])
+    return s:FALSE
+  endif
+endfunction"}}}
+
+" content :: String
+function! metarw#service#simplenote#create_note(content)"{{{
+  let url = printf('https://simple-note.appspot.com/api2/data?auth=%s&email=%s', s:token, webapi#http#encodeURI(s:email))
+  let res = webapi#http#post(url,
+  \  webapi#http#encodeURI(iconv(webapi#json#encode({
+  \    'content': a:content,
+  \  }),
+  \ 'utf-8',
+  \ &encoding))
+  \)
+  if res.status =~ '^2'
+    return {
+      \ 'result' : s:TRUE,
+      \ 'key' : res.content,
+      \ }
+  else
+    echoerr printf('error in update note. note_key: %s, response header: %s. ', a:note_key, res.header[0])
+    return {
+      \ 'result' : s:FALSE,
+      \ 'message' : res.header[0],
+      \ }
+  endif
+endfunction"}}}
+
 function! metarw#sn#write(fakepath, line1, line2, append_p)
   let g:sn_write_fakepath = string(a:fakepath)
   let g:sn_write_append_p = string(a:append_p)
