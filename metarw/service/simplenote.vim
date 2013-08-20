@@ -3,6 +3,11 @@ if exists("g:loaded_simplenote_service")
 endif
 let g:loaded_simplenote_service = 1
 
+" Variables "{{{1
+let s:FALSE = 0
+let s:TRUE = !s:FALSE
+
+
 if !exists('s:token')
   let s:email = ''
   let s:token = ''
@@ -20,7 +25,7 @@ let s:NOTE_FETCH_LENGTH = 20
 " modifydate :: String
 function! metarw#service#simplenote#check_modified(note_key, modifydate)
 
-  if len(s:authorization())
+  if len(s:token) == 0
     return [['auth error'], 'sn:', '']
   endif
 
@@ -40,8 +45,66 @@ function! metarw#service#simplenote#check_modified(note_key, modifydate)
   endif
 endfunction
 
-function! metarw#service#simplenote#get_notelist(note_key, modifydate)
+function! metarw#service#simplenote#get_notelist()
+  if len(s:token) == 0
+    return {
+      \ 'result' : s:FALSE,
+      \ 'message' : 'auth error',
+      \ }
+  endif
+
+  let url = printf(s:INDX_URL . 'auth=%s&email=%s&length=%d',
+    \  s:token,
+    \  s:email,
+    \  s:NOTE_FETCH_LENGTH)
+  let res = webapi#http#get(url)
+
+  if res.status !~ '^2'
+    echoerr printf('cannot get note list, response header: %s', res.header[0])
+    return {
+      \ 'result' : s:FALSE,
+      \ 'message' : res.header[0],
+      \ }
+  endif
+  let g:sn_complete_notelistres = res " TODO : Debug
+  let nodes = webapi#json#decode(iconv(res.content, 'utf-8', &encoding))
+  return {
+    \ 'result' : s:TRUE,
+    \ 'data' : nodes,
+    \ }
 endfunction
+
+" note_key :: String
+function! metarw#service#simplenote#read_note(note_key)
+  " FIXME : if the authorization is not finished, it doesn't call auth
+  if len(s:token) == 0
+    return {
+      \ 'result' : s:FALSE,
+      \ 'message' : 'error in authorization',
+      \ }
+  endif
+  let g:metarw_service_read_note_key = a:note_key " TODO : Debug
+
+  let url = printf(s:DATA_URL . '%s?auth=%s&email=%s', a:note_key, s:token, webapi#http#encodeURI(s:email))
+  let g:metarw_service_read_url = url " TODO : Debug
+  let res = webapi#http#get(url)
+  let g:metarw_service_read_res = res " TODO : Debug
+
+  if res.status =~ '^2'
+    let content = webapi#json#decode(iconv(res.content, 'utf-8', &encoding))
+    return {
+      \ 'result' : s:TRUE,
+      \ 'data' : content,
+      \ }
+  else
+    echoerr printf('cannot get content for the key: %s, response header: %s', a:note_key, res.header[0])
+    return {
+      \ 'result' : s:FALSE,
+      \ 'message' : res.header[0],
+      \ }
+  endif
+endfunction
+
 " note_key :: String
 " newtags :: [String]
 function! metarw#service#simplenote#edit_tag(note_key, modifydate, newtags)
@@ -77,7 +140,7 @@ function! metarw#sn#write(fakepath, line1, line2, append_p)
   let note_key = l[1]
   let g:sn_note_key = note_key
 
-  if len(s:authorization())
+  if len(s:token) == 0
     return ['error', 'error in authorization']
   endif
 "   if len(note_key) > 0 && line('$') == 1 && getline(1) == ''
@@ -114,9 +177,9 @@ function! metarw#sn#write(fakepath, line1, line2, append_p)
   return ['error', 'status code : ' . res.status]
 endfunction
 
-function! s:authorization()
+function! metarw#service#simplenote#authorization()
   if len(s:token) > 0
-    return ''
+    return s:TRUE
   endif
   " let s:email = input('email:')
   " FIXME: hard coded email address
@@ -126,8 +189,8 @@ function! s:authorization()
   let res = webapi#http#post(s:AUTH_URL, creds)
   if res.status =~ '^2'
     let s:token = res.content
-    return ''
+    return s:TRUE
   endif
-  return 'failed to authenticate'
+  return s:FALSE
 endfunction
 
