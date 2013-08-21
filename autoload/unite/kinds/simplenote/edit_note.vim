@@ -5,6 +5,11 @@ function! unite#kinds#simplenote#edit_note#define()"{{{
   return s:kind
 endfunction"}}}
 
+" Variables "{{{1
+let s:FALSE = 0
+let s:TRUE = !s:FALSE
+
+
 let s:kind = {
 \ 'name' : 'simplenote/edit_note',
 \ 'default_action' : 'edit',
@@ -13,6 +18,34 @@ let s:kind = {
 \}
 
 " actions {{{
+let s:kind.action_table.create_note = {
+\ 'description' : 'create note',
+\ 'is_selectable' : 0,
+\ 'is_quit' : 1,
+\ 'is_invalidate_cache' : 0,
+\}
+
+function! s:kind.action_table.create_note.func(candidate)"{{{
+  if metarw#service#simplenote#authorization() == s:FALSE
+    echoerr printf('failed for authorization.')
+  endif
+  let response = metarw#service#simplenote#create_note()
+  if response.result == s:FALSE
+    echoerr printf('failed to create new note. error: %s', response.message)
+    return
+  endif
+  let note_key = response.key
+
+  let g:sn_kind_create_new_note_key = note_key " TODO DEBUG
+  " let command = 'file ' . printf('sn:%s', escape(note_key, ' \/#%'))
+  let command = 'tabnew ' . printf('sn:%s', escape(note_key, ' \/#%'))
+  let type = ':'
+  call s:add_history(type, command)
+  silent! exec type . command
+  set nomodified
+  return
+endfunction"}}}
+
 let s:kind.action_table.edit = {
 \ 'description' : 'edit note',
 \ 'is_selectable' : 0,

@@ -20,48 +20,52 @@ let s:INDX_URL = 'https://simple-note.appspot.com/api2/index?'
 let s:NOTE_FETCH_LENGTH = 20
 
 function! metarw#sn#complete(arglead, cmdline, cursorpos)"{{{
-  if metarw#service#simplenote#authorization() == s:FALSE
-    return [['auth error'], 'sn:', '']
-  endif
-
-  let candidates = []
-  let res = metarw#service#simplenote#get_notelist()
-  if res.result == s:FALSE
-    echoerr printf('error in get notelist : %s', res.message)
-    return candidates
-  endif
-  for node in res.data.data
-    if !node.deleted
-      if !has_key(s:titles, node.key)
-        let res_content = metarw#service#simplenote#read_note(node.key)
-        if res_content.result == s:TRUE
-          let lines = split(iconv(res_content.data.content, 'utf-8', &encoding), "\n")
-          let s:titles[node.key] = len(lines) > 0 ? lines[0] : ''
-
-          let taglist = map(res_content.data.tags, iconv('v:val', 'utf-8', &encoding))
-          let s:tags_map[node.key] = join(taglist, ',')
-
-          let modifydate = iconv(res_content.data.modifydate, 'utf-8', &encoding)
-          let s:modifydates[node.key] = modifydate
-
-        else
-          echoerr printf('cannot get content for the key: %s, error: %s ', node.key, res_content.message)
-        endif
-      endif
-      call add(candidates, {
-      \ "modifydate" : s:modifydates[node.key],
-      \ "tags" : '[' . s:tags_map[node.key] . ']',
-      \ "title" : escape(s:titles[node.key], ' \/#%'),
-      \ "key" : node.key
-      \})
-    endif
-  endfor
-  return [candidates, 'sn:', '']
-"   return [s:mocklist(), 'sn:', '']
+"   if metarw#service#simplenote#authorization() == s:FALSE
+"     return [['auth error'], 'sn:', '']
+"   endif
+" 
+"   let candidates = []
+"   let res = metarw#service#simplenote#get_notelist()
+"   if res.result == s:FALSE
+"     echoerr printf('error in get notelist : %s', res.message)
+"     return candidates
+"   endif
+"   for node in res.data.data
+"     if !node.deleted
+"       if !has_key(s:titles, node.key)
+"         let res_content = metarw#service#simplenote#read_note(node.key)
+"         if res_content.result == s:TRUE
+"           let lines = split(iconv(res_content.data.content, 'utf-8', &encoding), "\n")
+"           let s:titles[node.key] = len(lines) > 0 ? lines[0] : ''
+" 
+"           let taglist = map(res_content.data.tags, iconv('v:val', 'utf-8', &encoding))
+"           let s:tags_map[node.key] = join(taglist, ',')
+" 
+"           let modifydate = iconv(res_content.data.modifydate, 'utf-8', &encoding)
+"           let s:modifydates[node.key] = modifydate
+" 
+"         else
+"           echoerr printf('cannot get content for the key: %s, error: %s ', node.key, res_content.message)
+"         endif
+"       endif
+"       call add(candidates, {
+"       \ "modifydate" : s:modifydates[node.key],
+"       \ "tags" : '[' . s:tags_map[node.key] . ']',
+"       \ "title" : escape(s:titles[node.key], ' \/#%'),
+"       \ "key" : node.key
+"       \})
+"     endif
+"   endfor
+"   return [candidates, 'sn:', '']
+  return [s:mocklist(), 'sn:', '']
 endfunction"}}}
 
 function! metarw#sn#read(fakepath)"{{{
   let note_key = s:parse_note_key(a:fakepath)
+  if len(note_key) == 0
+    echoerr  printf('Unexpected fakepath: %s', string(a:fakepath))
+    return ['error', 'error : invalid path ' . a:fakepath]
+  endif
 
   if metarw#service#simplenote#authorization() == s:FALSE
     return ['error', 'error in authorization']
@@ -98,9 +102,9 @@ function! metarw#sn#write(fakepath, line1, line2, append_p)"{{{
   if len(note_key) > 0
     " update with key
     let result = metarw#service#simplenote#update_note(
-      \ note_key,
-      \ join(getline(a:line1, a:line2), "\n")
-      \ )
+    \ note_key,
+    \ join(getline(a:line1, a:line2), "\n")
+    \ )
     if result == s:TRUE
       return ['done', '']
     else
@@ -109,8 +113,8 @@ function! metarw#sn#write(fakepath, line1, line2, append_p)"{{{
   else
     " create new note
     let result = metarw#service#simplenote#create_note(
-      \ join(getline(a:line1, a:line2), "\n")
-      \ )
+    \ join(getline(a:line1, a:line2), "\n")
+    \ )
     if result.result == s:TRUE
       silent! exec 'file '.printf('sn:%s', escape(result.key, ' \/#%'))
       set nomodified
@@ -126,11 +130,11 @@ function! s:parse_note_key(fakepath)"{{{
   " fakepath = sn: . {note_key}
   let l = split(a:fakepath, ':')
   if len(l) < 2
-    echoerr  printf('Unexpected fakepath: %s', string(a:fakepath))
+    " echoerr  printf('Unexpected fakepath: %s', string(a:fakepath))
     return ''
+  else
+    return l[1]
   endif
-
-  return l[1]
 endfunction"}}}
 
 function! s:mocklist()"{{{

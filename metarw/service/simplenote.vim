@@ -18,6 +18,7 @@ endif
 
 let s:AUTH_URL = 'https://simple-note.appspot.com/api/login'
 let s:DATA_URL = 'https://simple-note.appspot.com/api2/data/'
+let s:NEW_URL = 'https://simple-note.appspot.com/api2/data'
 let s:INDX_URL = 'https://simple-note.appspot.com/api2/index?'
 let s:NOTE_FETCH_LENGTH = 20
 
@@ -48,30 +49,30 @@ endfunction
 function! metarw#service#simplenote#get_notelist()
   if len(s:token) == 0
     return {
-      \ 'result' : s:FALSE,
-      \ 'message' : 'auth error',
-      \ }
+    \ 'result' : s:FALSE,
+    \ 'message' : 'auth error',
+    \ }
   endif
 
   let url = printf(s:INDX_URL . 'auth=%s&email=%s&length=%d',
-    \  s:token,
-    \  s:email,
-    \  s:NOTE_FETCH_LENGTH)
+  \  s:token,
+  \  s:email,
+  \  s:NOTE_FETCH_LENGTH)
   let res = webapi#http#get(url)
 
   if res.status !~ '^2'
-    echoerr printf('cannot get note list, response header: %s', res.header[0])
+    echoerr printf('cannot get note list, response header: %s', res.status)
     return {
-      \ 'result' : s:FALSE,
-      \ 'message' : res.header[0],
-      \ }
+    \ 'result' : s:FALSE,
+    \ 'message' : printf('%s : %s', res.status, res.message) ,
+    \ }
   endif
   let g:sn_complete_notelistres = res " TODO : Debug
   let nodes = webapi#json#decode(iconv(res.content, 'utf-8', &encoding))
   return {
-    \ 'result' : s:TRUE,
-    \ 'data' : nodes,
-    \ }
+  \ 'result' : s:TRUE,
+  \ 'data' : webapi#json#decode(nodes),
+  \ }
 endfunction
 
 " note_key :: String
@@ -79,9 +80,9 @@ function! metarw#service#simplenote#read_note(note_key)
   " FIXME : if the authorization is not finished, it doesn't call auth
   if len(s:token) == 0
     return {
-      \ 'result' : s:FALSE,
-      \ 'message' : 'error in authorization',
-      \ }
+    \ 'result' : s:FALSE,
+    \ 'message' : 'error in authorization',
+    \ }
   endif
   let g:metarw_service_read_note_key = a:note_key " TODO : Debug
 
@@ -93,14 +94,14 @@ function! metarw#service#simplenote#read_note(note_key)
   if res.status =~ '^2'
     let content = webapi#json#decode(iconv(res.content, 'utf-8', &encoding))
     return {
-      \ 'result' : s:TRUE,
-      \ 'data' : content,
-      \ }
+    \ 'result' : s:TRUE,
+    \ 'data' : webapi#json#decode(content),
+    \ }
   else
-    echoerr printf('cannot get content for the key: %s, response header: %s', a:note_key, res.header[0])
+    echoerr printf('cannot get content for the key: %s, response header: %s', a:note_key, res.status)
     return {
       \ 'result' : s:FALSE,
-      \ 'message' : res.header[0],
+      \ 'message' : printf('%s : %s', res.status, res.message) ,
       \ }
   endif
 endfunction
@@ -143,14 +144,37 @@ function! metarw#service#simplenote#update_note(note_key, content)"{{{
   if res.status =~ '^2'
     return s:TRUE
   else
-    echoerr printf('error in update note. note_key: %s, response header: %s. ', a:note_key, res.header[0])
+    echoerr printf('error in update note. note_key: %s, response header: %s. ', a:note_key, res.status)
     return s:FALSE
   endif
 endfunction"}}}
 
+function! metarw#service#simplenote#create_note()"{{{
+  let url = printf(s:NEW_URL . '?auth=%s&email=%s', s:token, webapi#http#encodeURI(s:email))
+  let res = webapi#http#post(url,
+  \  webapi#http#encodeURI(iconv(webapi#json#encode({
+  \    'content': '',
+  \  }),
+  \ 'utf-8',
+  \ &encoding))
+  \)
+  if res.status =~ '^2'
+    return {
+    \ 'result' : s:TRUE,
+    \ 'key' : webapi#json#decode(res.content).key,
+    \ }
+  else
+    echoerr printf('error in create new note. response header: %s. ', res.status)
+    return {
+    \ 'result' : s:FALSE,
+    \ 'message' : printf('%s : %s', res.status, res.message) ,
+    \ }
+  endif
+endfunction"}}}
+
 " content :: String
-function! metarw#service#simplenote#create_note(content)"{{{
-  let url = printf('https://simple-note.appspot.com/api2/data?auth=%s&email=%s', s:token, webapi#http#encodeURI(s:email))
+function! metarw#service#simplenote#create_note_w_content(content)"{{{
+  let url = printf(s:NEW_URL . '?auth=%s&email=%s', s:token, webapi#http#encodeURI(s:email))
   let res = webapi#http#post(url,
   \  webapi#http#encodeURI(iconv(webapi#json#encode({
   \    'content': a:content,
@@ -160,19 +184,19 @@ function! metarw#service#simplenote#create_note(content)"{{{
   \)
   if res.status =~ '^2'
     return {
-      \ 'result' : s:TRUE,
-      \ 'key' : res.content,
-      \ }
+    \ 'result' : s:TRUE,
+    \ 'key' : webapi#json#decode(res.content).key,
+    \ }
   else
-    echoerr printf('error in update note. note_key: %s, response header: %s. ', a:note_key, res.header[0])
+    echoerr printf('error in create new note. response header: %s. ', res.status)
     return {
-      \ 'result' : s:FALSE,
-      \ 'message' : res.header[0],
-      \ }
+    \ 'result' : s:FALSE,
+    \ 'message' : printf('%s : %s', res.status, res.message) ,
+    \ }
   endif
 endfunction"}}}
 
-function! metarw#service#simplenote#authorization()
+function! metarw#service#simplenote#authorization()"{{{
   if len(s:token) > 0
     return s:TRUE
   endif
@@ -187,5 +211,5 @@ function! metarw#service#simplenote#authorization()
     return s:TRUE
   endif
   return s:FALSE
-endfunction
+endfunction"}}}
 
