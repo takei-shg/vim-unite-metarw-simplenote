@@ -71,7 +71,8 @@ let s:kind.action_table.edit_tags = {
 
 function! s:kind.action_table.edit_tags.func(candidate)"{{{
   let data = a:candidate.action__data
-  let command = 'echo data'
+  let newtags = input('Edit tags:', data.tags)
+  let command = 'call metarw#service#simplenote#edit_tag(data.key, newtags)'
   let type = get(a:candidate, 'action__type', ':')
   call s:add_history(type, command)
   execute type . command
@@ -79,10 +80,6 @@ function! s:kind.action_table.edit_tags.func(candidate)"{{{
   let g:unite_kinds_sn_edit_note_edit_tag_key = a:candidate.action__data.key
   let g:unite_kinds_sn_edit_note_edit_tag_modifydate = a:candidate.action__data.modifydate
 
-  call metarw#service#simplenote#check_modified(
-        \  a:candidate.action__data.key,
-        \  a:candidate.action__data.modifydate
-        \ )
 endfunction"}}}
 " }}}
 

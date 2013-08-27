@@ -48,10 +48,13 @@ endfunction
 
 function! metarw#service#simplenote#get_notelist()
   if len(s:token) == 0
-    return {
-    \ 'result' : s:FALSE,
-    \ 'message' : 'auth error',
-    \ }
+    let result = metarw#service#simplenote#authorization()
+    if result == s:FALSE
+      return {
+      \ 'result' : s:FALSE,
+      \ 'message' : 'error in authorization',
+      \ }
+    endif
   endif
 
   let url = printf(s:INDX_URL . 'auth=%s&email=%s&length=%d',
@@ -61,7 +64,7 @@ function! metarw#service#simplenote#get_notelist()
   let res = webapi#http#get(url)
 
   if res.status !~ '^2'
-    echoerr printf('cannot get note list, response header: %s', res.status)
+    echoerr printf('cannot get note list, response header: %s - %s', res.status, res.message)
     return {
     \ 'result' : s:FALSE,
     \ 'message' : printf('%s : %s', res.status, res.message) ,
@@ -71,7 +74,7 @@ function! metarw#service#simplenote#get_notelist()
   let nodes = webapi#json#decode(iconv(res.content, 'utf-8', &encoding))
   return {
   \ 'result' : s:TRUE,
-  \ 'data' : webapi#json#decode(nodes),
+  \ 'data' : nodes,
   \ }
 endfunction
 
@@ -79,10 +82,13 @@ endfunction
 function! metarw#service#simplenote#read_note(note_key)
   " FIXME : if the authorization is not finished, it doesn't call auth
   if len(s:token) == 0
-    return {
-    \ 'result' : s:FALSE,
-    \ 'message' : 'error in authorization',
-    \ }
+    let result = metarw#service#simplenote#authorization()
+    if result == s:FALSE
+      return {
+      \ 'result' : s:FALSE,
+      \ 'message' : 'error in authorization',
+      \ }
+    endif
   endif
   let g:metarw_service_read_note_key = a:note_key " TODO : Debug
 
@@ -95,7 +101,7 @@ function! metarw#service#simplenote#read_note(note_key)
     let content = webapi#json#decode(iconv(res.content, 'utf-8', &encoding))
     return {
     \ 'result' : s:TRUE,
-    \ 'data' : webapi#json#decode(content),
+    \ 'data' : content,
     \ }
   else
     echoerr printf('cannot get content for the key: %s, response header: %s', a:note_key, res.status)
@@ -108,9 +114,18 @@ endfunction
 
 " note_key :: String
 " newtags :: [String]
-function! metarw#service#simplenote#edit_tag(note_key, modifydate, newtags)
+function! metarw#service#simplenote#edit_tag(note_key, newtags)"{{{
+  if len(s:token) == 0
+    let result = metarw#service#simplenote#authorization()
+    if result == s:FALSE
+      return {
+      \ 'result' : s:FALSE,
+      \ 'message' : 'error in authorization',
+      \ }
+    endif
+  endif
 
-  let update_url = printf('https://simple-note.appspot.com/api2/data/%s?auth=%s&email=%s', a:note_key, s:token, webapi#http#encodeURI(s:email))
+  let update_url = printf(s:DATA_URL . '%s?auth=%s&email=%s', a:note_key, s:token, webapi#http#encodeURI(s:email))
   let res = webapi#http#post(update_url,
   \  webapi#http#encodeURI(iconv(webapi#json#encode({
   \    'tags': a:newtags,
@@ -119,20 +134,25 @@ function! metarw#service#simplenote#edit_tag(note_key, modifydate, newtags)
   \ &encoding))
   \)
   if res.status =~ '^2'
-    if len(note_key) == 0
-      let key = res.content
-      echo 'tag update succeeded.'
-      " silent! exec 'file '.printf('sn:%s', escape(key, ' \/#%'))
-      set nomodified
-    endif
-    return ['done', '']
+    return s:TRUE
+  else
+    echoerr printf('error in update tags. note_key: %s, response header: %s. ', a:note_key, res.status)
+    return s:FALSE
   endif
-  return ['error', 'status code : ' . res.status]
-endfunction
+endfunction"}}}
 
 " note_key :: String
 " content :: String
 function! metarw#service#simplenote#update_note(note_key, content)"{{{
+  if len(s:token) == 0
+    let result = metarw#service#simplenote#authorization()
+    if result == s:FALSE
+      return {
+      \ 'result' : s:FALSE,
+      \ 'message' : 'error in authorization',
+      \ }
+    endif
+  endif
   let update_url = printf(s:DATA_URL . '%s?auth=%s&email=%s', a:note_key, s:token, webapi#http#encodeURI(s:email))
   let res = webapi#http#post(update_url,
   \  webapi#http#encodeURI(iconv(webapi#json#encode({
@@ -150,6 +170,15 @@ function! metarw#service#simplenote#update_note(note_key, content)"{{{
 endfunction"}}}
 
 function! metarw#service#simplenote#create_note()"{{{
+  if len(s:token) == 0
+    let result = metarw#service#simplenote#authorization()
+    if result == s:FALSE
+      return {
+      \ 'result' : s:FALSE,
+      \ 'message' : 'error in authorization',
+      \ }
+    endif
+  endif
   let url = printf(s:NEW_URL . '?auth=%s&email=%s', s:token, webapi#http#encodeURI(s:email))
   let res = webapi#http#post(url,
   \  webapi#http#encodeURI(iconv(webapi#json#encode({
@@ -159,9 +188,10 @@ function! metarw#service#simplenote#create_note()"{{{
   \ &encoding))
   \)
   if res.status =~ '^2'
+    let content = webapi#json#decode(iconv(res.content, 'utf-8', &encoding))
     return {
     \ 'result' : s:TRUE,
-    \ 'key' : webapi#json#decode(res.content).key,
+    \ 'key' : content.key,
     \ }
   else
     echoerr printf('error in create new note. response header: %s. ', res.status)
@@ -174,6 +204,15 @@ endfunction"}}}
 
 " content :: String
 function! metarw#service#simplenote#create_note_w_content(content)"{{{
+  if len(s:token) == 0
+    let result = metarw#service#simplenote#authorization()
+    if result == s:FALSE
+      return {
+      \ 'result' : s:FALSE,
+      \ 'message' : 'error in authorization',
+      \ }
+    endif
+  endif
   let url = printf(s:NEW_URL . '?auth=%s&email=%s', s:token, webapi#http#encodeURI(s:email))
   let res = webapi#http#post(url,
   \  webapi#http#encodeURI(iconv(webapi#json#encode({
@@ -183,9 +222,10 @@ function! metarw#service#simplenote#create_note_w_content(content)"{{{
   \ &encoding))
   \)
   if res.status =~ '^2'
+    let content = webapi#json#decode(iconv(res.content, 'utf-8', &encoding))
     return {
     \ 'result' : s:TRUE,
-    \ 'key' : webapi#json#decode(res.content).key,
+    \ 'key' : content.key,
     \ }
   else
     echoerr printf('error in create new note. response header: %s. ', res.status)
@@ -212,4 +252,7 @@ function! metarw#service#simplenote#authorization()"{{{
   endif
   return s:FALSE
 endfunction"}}}
+
+" local functions {{{
+" }}}
 
